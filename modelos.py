@@ -1,25 +1,37 @@
 import numpy as np
 import joblib
 import time
-from sklearn.datasets import make_classification
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold
+from sklearn.base import clone
 
 # ==========================================
-# 1. MÓDULO DE TESTE (Apague quando a Pessoa A entregar os dados)
+# 1. CARREGAMENTO DOS DADOS REAIS
 # ==========================================
-print("[*] Gerando dados fictícios para teste do pipeline...")
-# Simulando 10 classes (ex: 10 personagens dos Simpsons)
-X_train, y_train = make_classification(n_samples=1000, n_features=64, n_informative=20, n_classes=10, random_state=42)
-X_test, y_test = make_classification(n_samples=300, n_features=64, n_informative=20, n_classes=10, random_state=99)
+print("[*] Carregando dados de treino e validação...")
+X_train = np.load('X_train.npy')
+y_train = np.load('y_train.npy')
+X_test  = np.load('X_test.npy')
+y_test  = np.load('y_test.npy')
+print(f"    X_train: {X_train.shape} | X_test: {X_test.shape}")
 
-# Quando a Pessoa A entregar, você usará algo como:
-# X_train, y_train = np.load('X_train.npy'), np.load('y_train.npy')
-# X_test, y_test = np.load('X_test.npy'), np.load('y_test.npy')
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test  = scaler.transform(X_test)
+print("[*] Features normalizadas com StandardScaler.")
+
+pca = PCA(n_components=0.95, random_state=42)
+X_train = pca.fit_transform(X_train)
+X_test  = pca.transform(X_test)
+print(f"[*] PCA aplicado: {X_train.shape[1]} componentes (95% da variância).")
 
 
 # ==========================================
@@ -32,64 +44,89 @@ modelos = {
     "knn_k5": KNeighborsClassifier(n_neighbors=5),
     "knn_k7": KNeighborsClassifier(n_neighbors=7),
     "knn_k9": KNeighborsClassifier(n_neighbors=9),
-    
-    "dt_depth5": DecisionTreeClassifier(max_depth=5, random_state=42),
-    "dt_depth10": DecisionTreeClassifier(max_depth=10, random_state=42),
-    "dt_depth20": DecisionTreeClassifier(max_depth=20, random_state=42),
+
+    "dt_depth5":     DecisionTreeClassifier(max_depth=5,    random_state=42),
+    "dt_depth10":    DecisionTreeClassifier(max_depth=10,   random_state=42),
+    "dt_depth20":    DecisionTreeClassifier(max_depth=20,   random_state=42),
     "dt_sem_limite": DecisionTreeClassifier(max_depth=None, random_state=42),
-    
-    "svm_linear_C01": CalibratedClassifierCV(estimator=SVC(kernel='linear', C=0.1, random_state=42), ensemble=False),
-    "svm_linear_C1": CalibratedClassifierCV(estimator=SVC(kernel='linear', C=1.0, random_state=42), ensemble=False),
-    "svm_rbf_C1": CalibratedClassifierCV(estimator=SVC(kernel='rbf', C=1.0, random_state=42), ensemble=False),
-    "svm_poly": CalibratedClassifierCV(estimator=SVC(kernel='poly', degree=3, random_state=42), ensemble=False),
-    
-    "rf_10_trees": RandomForestClassifier(n_estimators=10, random_state=42),
-    "rf_50_trees": RandomForestClassifier(n_estimators=50, random_state=42),
+
+    "svm_linear_C01": CalibratedClassifierCV(estimator=SVC(kernel='linear', C=0.1,    random_state=42), ensemble=False),
+    "svm_linear_C1":  CalibratedClassifierCV(estimator=SVC(kernel='linear', C=1.0,    random_state=42), ensemble=False),
+    "svm_rbf_C1":     CalibratedClassifierCV(estimator=SVC(kernel='rbf',    C=1.0,    random_state=42), ensemble=False),
+    "svm_poly":       CalibratedClassifierCV(estimator=SVC(kernel='poly',   degree=3, random_state=42), ensemble=False),
+
+    "rf_10_trees":  RandomForestClassifier(n_estimators=10,  random_state=42),
+    "rf_50_trees":  RandomForestClassifier(n_estimators=50,  random_state=42),
     "rf_100_trees": RandomForestClassifier(n_estimators=100, random_state=42),
     "rf_200_trees": RandomForestClassifier(n_estimators=200, random_state=42),
-    
-    "mlp_simples": MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000, random_state=42),
-    "mlp_profundo": MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42),
-    "mlp_largo": MLPClassifier(hidden_layer_sizes=(200,), max_iter=1000, random_state=42),
-    "mlp_tanh": MLPClassifier(hidden_layer_sizes=(100,), activation='tanh', max_iter=1000, random_state=42)
+
+    "mlp_simples":  MLPClassifier(hidden_layer_sizes=(50,),             max_iter=1000, random_state=42),
+    "mlp_profundo": MLPClassifier(hidden_layer_sizes=(100, 50),         max_iter=1000, random_state=42),
+    "mlp_largo":    MLPClassifier(hidden_layer_sizes=(200,),            max_iter=1000, random_state=42),
+    "mlp_tanh":     MLPClassifier(hidden_layer_sizes=(100,), activation='tanh', max_iter=1000, random_state=42),
 }
 
 
 # ==========================================
-# 3. PIPELINE DE TREINAMENTO E INFERÊNCIA
+# 3. TREINAMENTO DOS 20 CLASSIFICADORES BASE
 # ==========================================
 print(f"[*] Iniciando o treinamento de {len(modelos)} modelos.")
 
-# Dicionário que a Pessoa C vai receber
-# Chave: Nome do modelo | Valor: Matriz de probabilidades de teste
-matriz_probabilidades = {} 
-
+matriz_probabilidades = {}
 tempo_inicio_total = time.time()
 
 for nome, modelo in modelos.items():
     print(f"    -> Treinando {nome}...", end=" ")
     inicio_modelo = time.time()
-    
     modelo.fit(X_train, y_train)
-    
-    probabilidades = modelo.predict_proba(X_test)
-    matriz_probabilidades[nome] = probabilidades
-    
-    tempo_modelo = time.time() - inicio_modelo
-    print(f"Concluído em {tempo_modelo:.2f} segundos.")
+    matriz_probabilidades[nome] = modelo.predict_proba(X_test)
+    print(f"Concluído em {time.time() - inicio_modelo:.2f} segundos.")
 
 tempo_total = time.time() - tempo_inicio_total
-print(f"\n[*] Todos os {len(modelos)} modelos treinados com sucesso em {tempo_total:.2f} segundos!")
+print(f"\n[*] Todos os {len(modelos)} modelos treinados em {tempo_total:.2f} segundos!")
 
 
 # ==========================================
-# 4. EXPORTAÇÃO
+# 4. STACKING — META-CLASSIFICADOR
+# ==========================================
+print("\n[*] Gerando meta-features via stacking (5-fold)...")
+print("    (isso pode levar alguns minutos devido aos SVMs)\n")
+
+n_classes    = len(np.unique(y_train))
+skf          = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+meta_X_train = np.zeros((len(X_train), len(modelos) * n_classes))
+
+for fold_idx, (tr_idx, val_idx) in enumerate(skf.split(X_train, y_train), 1):
+    print(f"    Fold {fold_idx}/5...", end=" ", flush=True)
+    inicio_fold = time.time()
+    X_f_tr, X_f_val = X_train[tr_idx], X_train[val_idx]
+    y_f_tr = y_train[tr_idx]
+
+    for i, (nome, modelo_base) in enumerate(modelos.items()):
+        modelo_fold = clone(modelo_base)
+        modelo_fold.fit(X_f_tr, y_f_tr)
+        probs = modelo_fold.predict_proba(X_f_val)
+        meta_X_train[val_idx, i * n_classes:(i + 1) * n_classes] = probs
+
+    print(f"Concluído em {time.time() - inicio_fold:.1f}s")
+
+meta_X_test = np.hstack(list(matriz_probabilidades.values()))
+
+print("\n[*] Treinando meta-classificador (LogisticRegression)...")
+meta_clf = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+meta_clf.fit(meta_X_train, y_train)
+probs_stacking = meta_clf.predict_proba(meta_X_test)
+print("[*] Meta-classificador treinado.")
+
+
+# ==========================================
+# 5. EXPORTAÇÃO
 # ==========================================
 pacote_entrega = {
     "probabilidades": matriz_probabilidades,
-    "y_test_real": y_test
+    "probs_stacking": probs_stacking,
+    "y_test_real":    y_test,
 }
 
-nome_arquivo = 'previsoes_20_modelos.pkl'
-joblib.dump(pacote_entrega, nome_arquivo)
-print(f"[*] Arquivo '{nome_arquivo}' salvo com sucesso na raiz do projeto.")
+joblib.dump(pacote_entrega, 'previsoes_20_modelos.pkl')
+print(f"\n[*] Arquivo 'previsoes_20_modelos.pkl' salvo com sucesso na raiz do projeto.")

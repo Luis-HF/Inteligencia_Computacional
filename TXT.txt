@@ -1,0 +1,19 @@
+O sistema deve possuir:
+Métodos de extração de características
+Pode ser usado qualquer descritor de características. 
+Em caso de dúvidas, favor conversar com o professor sobre as possibilidades. 
+Algumas deep features AQUI.
+
+Códigos Classificadores (Código Simples/Ideia: código - Outro Código Completo: aqui: )
+Usar quatro classificadores vistos e disponíveis (k-NN, Árvore de Decisão, SVM, MLP, Random Forest). Poderão ser usadas as bibliotecas vistas em aulas (scikit-learn);
+Usar cross-validation de 10 folds. Para o trabalho dos Simpsons, usar a divisão como proposta nos arquivos.
+Para manipular as imagens, vocês podem usar o MATLAB ou qualquer linguagem/ferramenta que quiserem.
+Usar algum método de combinação estática de classificadores. Utilize pelo menos um conjunto com 20 classificadores diferentes (se várias features e vários classificadores).
+
+
+O sistema deve produzir como saída a acurácia ou f1-score [0 a 100%] e uma matriz de confusão (N × N) indicando o percentual de acertos e erros do sistema entre as N classes. 
+
+Poderá ser utilizada qualquer linguagem de programação.
+
+Deverá ser entregue na data combinada um artigo descrevendo em detalhes o método proposto (não é necessário colocar código ou explicar código), descrevendo somente aspectos relativos ao que foi empregado. O artigo deve ainda apresentar uma análise do desempenho do sistema, reportando as taxas de classificação de cada classificador, matrizes de confusão, impacto da combinação de classificadores e uma análise dos pontos fracos e fortes do sistema. O código-fonte deverá ser entregue e o mesmo será avaliado. Reportar os resultados para ambos os conjuntos de teste e validação (caso existam). 
+

@@ -1,0 +1,7 @@
+# Arquivos gerados pelo pipeline
+*.npy
+*.pkl
+*.png
+
+# Makefile de desenvolvimento local
+Makefile

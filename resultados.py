@@ -3,73 +3,72 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 
+CLASSES = ["bart", "homer", "lisa", "maggie", "marge"]
+
 # ==========================================
-# 1. CARREGAMENTO DOS DADOS (O SEU ARQUIVO)
+# 1. CARREGAMENTO DOS DADOS
 # ==========================================
 print("[*] Carregando as previsões...")
 pacote = joblib.load('previsoes_20_modelos.pkl')
 
 matriz_probs_dict = pacote['probabilidades']
-y_test_real = pacote['y_test_real']
+probs_stacking    = pacote['probs_stacking']
+y_test_real       = pacote['y_test_real']
 
 print(f"[*] Dados carregados! {len(matriz_probs_dict)} modelos encontrados.")
 
 
 # ==========================================
-# 2. A FUSÃO DE CLASSIFICADORES (SOFT VOTING)
+# 2. SOFT VOTING
 # ==========================================
-print("[*] Aplicando a combinação estática (Soft Voting)...")
+array_3d_probs  = np.array(list(matriz_probs_dict.values()))
+probs_media     = np.mean(array_3d_probs, axis=0)
+y_pred_voting   = np.argmax(probs_media, axis=1)
 
-# Transforma o dicionário em uma lista de matrizes
-lista_probabilidades = list(matriz_probs_dict.values())
-
-# Converte a lista para um array 3D do NumPy. 
-# Formato: (20 modelos, N_imagens_teste, N_classes)
-array_3d_probs = np.array(lista_probabilidades)
-
-# Tira a MÉDIA das probabilidades (achatando o eixo 0, que são os 20 modelos)
-probs_media_final = np.mean(array_3d_probs, axis=0)
-
-# A decisão final do sistema é a classe que ficou com a maior probabilidade após a média
-y_pred_ensemble = np.argmax(probs_media_final, axis=1)
+# ==========================================
+# 3. STACKING
+# ==========================================
+y_pred_stacking = np.argmax(probs_stacking, axis=1)
 
 
 # ==========================================
-# 3. CÁLCULO DAS MÉTRICAS EXIGIDAS NO EDITAL
+# 4. MÉTRICAS
 # ==========================================
-print("\n" + "="*40)
-print(" RESULTADOS FINAIS DO SISTEMA (ENSEMBLE)")
-print("="*40)
+def print_metricas(titulo, y_real, y_pred):
+    acuracia = accuracy_score(y_real, y_pred) * 100
+    f1 = f1_score(y_real, y_pred, average='weighted') * 100
+    print("\n" + "="*40)
+    print(f" {titulo}")
+    print("="*40)
+    print(f"Acurácia Geral:      {acuracia:.2f}%")
+    print(f"F1-Score (Weighted): {f1:.2f}%")
+    print("="*40)
 
-# Acurácia
-acuracia = accuracy_score(y_test_real, y_pred_ensemble) * 100
-print(f"Acurácia Geral: {acuracia:.2f}%")
-
-# F1-Score (Usando 'weighted' porque a base dos Simpsons geralmente é desbalanceada)
-f1 = f1_score(y_test_real, y_pred_ensemble, average='weighted') * 100
-print(f"F1-Score (Weighted): {f1:.2f}%")
+print_metricas("SOFT VOTING (média de probabilidades)", y_test_real, y_pred_voting)
+print_metricas("STACKING   (meta-classificador LR)",   y_test_real, y_pred_stacking)
 
 
 # ==========================================
-# 4. GERAÇÃO DA MATRIZ DE CONFUSÃO PARA O ARTIGO
+# 5. MATRIZES DE CONFUSÃO
 # ==========================================
-print("\n[*] Gerando e salvando a Matriz de Confusão...")
+print("\n[*] Gerando matrizes de confusão...")
 
-# Calcula a matriz bruta
-cm = confusion_matrix(y_test_real, y_pred_ensemble)
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-# Configura a plotagem visual (MUITO importante para colocar no relatório SBC)
-fig, ax = plt.subplots(figsize=(10, 8)) # Tamanho ajustável dependendo de quantos personagens são
-disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+for ax, y_pred, titulo in zip(
+    axes,
+    [y_pred_voting, y_pred_stacking],
+    ["Soft Voting (20 Modelos)", "Stacking (Meta-clf LR)"]
+):
+    cm = confusion_matrix(y_test_real, y_pred)
+    ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES).plot(
+        cmap='Blues', ax=ax, values_format='d'
+    )
+    ax.set_title(f"Matriz de Confusão — {titulo}")
+    ax.set_xlabel("Classe Predita")
+    ax.set_ylabel("Classe Real")
 
-# Plota usando um mapa de cores elegante (Blues)
-disp.plot(cmap='Blues', ax=ax, values_format='d')
-
-plt.title("Matriz de Confusão - Ensemble (20 Modelos)")
-plt.xlabel("Classe Predita pelo Sistema")
-plt.ylabel("Classe Real (Gabarito)")
-
-# Salva a imagem em alta resolução
+plt.tight_layout()
 nome_imagem = "matriz_confusao_final.png"
 plt.savefig(nome_imagem, dpi=300, bbox_inches='tight')
 print(f"[*] Imagem '{nome_imagem}' salva com sucesso. Pronta para o artigo SBC!")
