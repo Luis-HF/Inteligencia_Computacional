@@ -4,71 +4,53 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 
 CLASSES = ["bart", "homer", "lisa", "maggie", "marge"]
+pacote = joblib.load('previsoes_final.pkl')
 
-# ==========================================
-# 1. CARREGAMENTO DOS DADOS
-# ==========================================
-print("[*] Carregando as previsões...")
-pacote = joblib.load('previsoes_20_modelos.pkl')
+y_train_real = pacote['y_train_real']
+y_test_real  = pacote['y_test_real']
 
-matriz_probs_dict = pacote['probabilidades']
-probs_stacking    = pacote['probs_stacking']
-y_test_real       = pacote['y_test_real']
+# Soft Voting
+probs_train_media = np.mean(np.array(list(pacote['probs_train_base'].values())), axis=0)
+probs_test_media  = np.mean(np.array(list(pacote['probs_test_base'].values())), axis=0)
 
-print(f"[*] Dados carregados! {len(matriz_probs_dict)} modelos encontrados.")
+y_pred_voting_train = np.argmax(probs_train_media, axis=1)
+y_pred_voting_test  = np.argmax(probs_test_media, axis=1)
 
+# Stacking
+y_pred_stacking_train = np.argmax(pacote['probs_stacking_train'], axis=1)
+y_pred_stacking_test  = np.argmax(pacote['probs_stacking_test'], axis=1)
 
-# ==========================================
-# 2. SOFT VOTING
-# ==========================================
-array_3d_probs  = np.array(list(matriz_probs_dict.values()))
-probs_media     = np.mean(array_3d_probs, axis=0)
-y_pred_voting   = np.argmax(probs_media, axis=1)
-
-# ==========================================
-# 3. STACKING
-# ==========================================
-y_pred_stacking = np.argmax(probs_stacking, axis=1)
-
-
-# ==========================================
-# 4. MÉTRICAS
-# ==========================================
 def print_metricas(titulo, y_real, y_pred):
-    acuracia = accuracy_score(y_real, y_pred) * 100
+    acc = accuracy_score(y_real, y_pred) * 100
     f1 = f1_score(y_real, y_pred, average='weighted') * 100
-    print("\n" + "="*40)
-    print(f" {titulo}")
-    print("="*40)
-    print(f"Acurácia Geral:      {acuracia:.2f}%")
-    print(f"F1-Score (Weighted): {f1:.2f}%")
-    print("="*40)
+    print(f"[{titulo}] Acurácia: {acc:.2f}% | F1-Score: {f1:.2f}%")
 
-print_metricas("SOFT VOTING (média de probabilidades)", y_test_real, y_pred_voting)
-print_metricas("STACKING   (meta-classificador LR)",   y_test_real, y_pred_stacking)
+print("="*50 + "\n DESEMPENHO NO TREINO\n" + "="*50)
+print_metricas("SOFT VOTING - Treino", y_train_real, y_pred_voting_train)
+print_metricas("STACKING    - Treino", y_train_real, y_pred_stacking_train)
 
+print("\n" + "="*50 + "\n DESEMPENHO NA VALIDAÇÃO / TESTE\n" + "="*50)
+print_metricas("SOFT VOTING - Teste", y_test_real, y_pred_voting_test)
+print_metricas("STACKING    - Teste", y_test_real, y_pred_stacking_test)
 
-# ==========================================
-# 5. MATRIZES DE CONFUSÃO
-# ==========================================
-print("\n[*] Gerando matrizes de confusão...")
-
+# Matriz de Confusão Percentual (Teste)
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
 for ax, y_pred, titulo in zip(
     axes,
-    [y_pred_voting, y_pred_stacking],
-    ["Soft Voting (20 Modelos)", "Stacking (Meta-clf LR)"]
+    [y_pred_voting_test, y_pred_stacking_test],
+    ["Soft Voting (Teste)", "Stacking (Teste)"]
 ):
-    cm = confusion_matrix(y_test_real, y_pred)
-    ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CLASSES).plot(
-        cmap='Blues', ax=ax, values_format='d'
-    )
-    ax.set_title(f"Matriz de Confusão — {titulo}")
+    # normalize='true' gera a porcentagem por linha (classe real)
+    cm_percent = confusion_matrix(y_test_real, y_pred, normalize='true') * 100
+    
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm_percent, display_labels=CLASSES)
+    disp.plot(cmap='Blues', ax=ax, values_format='.1f')
+    
+    ax.set_title(f"Matriz de Confusão (%) — {titulo}")
     ax.set_xlabel("Classe Predita")
     ax.set_ylabel("Classe Real")
 
 plt.tight_layout()
-nome_imagem = "matriz_confusao_final.png"
-plt.savefig(nome_imagem, dpi=300, bbox_inches='tight')
-print(f"[*] Imagem '{nome_imagem}' salva com sucesso. Pronta para o artigo SBC!")
+plt.savefig("matriz_confusao_percentual.png", dpi=300, bbox_inches='tight')
+print("\n[*] Imagem 'matriz_confusao_percentual.png' salva com as porcentagens exigidas.")
